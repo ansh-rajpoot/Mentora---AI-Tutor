@@ -8,3 +8,4 @@ google-generativeai
 gunicorn
 whitenoise
 dj-database-url
+Pillow
