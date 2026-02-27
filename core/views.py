@@ -8,14 +8,16 @@ from dotenv import load_dotenv
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from .models import Conversation, UserProfile, SubjectProgress, XPTransaction, Level, Badge, UserBadge, Quiz, UserQuizProgress, SurpriseChallenge
-from .serializers import DashboardStatsSerializer
+from .models import Subject, Conversation, UserProfile, XPTransaction, Level, Achievement, UserAchievement, Quiz, UserQuizAttempt, UserAnswer
+from .services import award_xp
 from django.utils import timezone
 from datetime import timedelta
 from django.contrib import messages
-from django.contrib.auth import logout, update_session_auth_hash
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.sessions.models import Session
+from django.views.generic import TemplateView
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 # Initialize FreeFlow Client
 def get_freeflow_client():
@@ -27,20 +29,16 @@ def get_freeflow_client():
 def teacher_view(request, subject="General Learning"):
     """Render the AI Teacher interface."""
     current_day = 1
-    if request.user.is_authenticated:
-        progress, _ = SubjectProgress.objects.get_or_create(user=request.user, subject=subject)
-        current_day = progress.current_day
+    subject_obj, _ = Subject.objects.get_or_create(name=subject)
     
     return render(request, 'core/teacher.html', {
-        'subject': subject,
+        'subject': subject_obj.name,
         'current_day': current_day
     })
 
 def landing_view(request):
     """Render the new landing page."""
     return render(request, 'core/index.html')
-
-from django.contrib.auth import authenticate, login, logout
 
 def login_view(request):
     """Render the login page and handle authentication."""
@@ -89,8 +87,9 @@ def chat_history_view(request):
             history = history.filter(day_number=day)
         else:
              # Default to current day
-             progress, _ = SubjectProgress.objects.get_or_create(user=request.user, subject=topic)
-             history = history.filter(day_number=progress.current_day)
+             subject, _ = Subject.objects.get_or_create(name=topic)
+             # Current day logic removed or to be implemented later
+             history = history.filter(topic=topic)
     else:
         return JsonResponse({"history": []})
         
@@ -107,12 +106,11 @@ def chat_history_view(request):
     ]
     return JsonResponse({"history": data})
 
-@login_required
 def subject_days_view(request):
     """Return status for all 14 days of the requested subject."""
     subject = request.GET.get('subject', 'General Learning')
-    progress, _ = SubjectProgress.objects.get_or_create(user=request.user, subject=subject)
-    current_day = progress.current_day
+    subject_obj, _ = Subject.objects.get_or_create(name=subject)
+    current_day = 1 # Simplified for now
     
     days = []
     # Using 14 days as a standard for now
@@ -140,59 +138,126 @@ def delete_chat_view(request, chat_id):
     except Conversation.DoesNotExist:
         return JsonResponse({"error": "Chat not found"}, status=404)
 
-@login_required
-def account_view(request):
-    """Render the user account/profile page and handle updates."""
-    profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    
-    # Fetch gamification data
-    badges = request.user.badges.all().select_related('badge')
-    next_level = Level.objects.filter(number=(profile.current_level.number + 1 if profile.current_level else 2)).first()
-    
-    # XP Progress calculation
-    xp_to_next = next_level.xp_threshold if next_level else profile.total_xp
-    xp_progress = 0
-    if next_level:
-        current_lvl_xp = profile.current_level.xp_threshold if profile.current_level else 0
-        total_range = next_level.xp_threshold - current_lvl_xp
-        earned_in_range = profile.total_xp - current_lvl_xp
-        xp_progress = min(100, max(0, int((earned_in_range / total_range) * 100))) if total_range > 0 else 0
-    else:
-        xp_progress = 100
+class AccountPageView(LoginRequiredMixin, TemplateView):
+    template_name = 'core/account.html'
 
-    # Quizzes & Challenges
-    total_quizzes = Quiz.objects.count()
-    completed_quizzes = UserQuizProgress.objects.filter(user=request.user, completed=True).count()
-    quizzes_remaining = max(0, total_quizzes - completed_quizzes)
-    active_challenges = SurpriseChallenge.objects.filter(is_active=True)
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile, _ = UserProfile.objects.get_or_create(user=self.request.user)
+        
+        # Gamification Data
+        achievements = self.request.user.achievements.all().select_related('achievement')
+        next_level_number = profile.current_level.number + 1 if profile.current_level else 2
+        next_level = Level.objects.filter(number=next_level_number).first()
+        
+        # XP Progress (Targeting 100 XP per level)
+        current_lvl_num = profile.current_level.number if profile.current_level else 0
+        xp_in_level = profile.total_xp % 100
+        xp_progress = xp_in_level # Since 100 is the threshold
+        xp_needed_to_next = 100 - xp_in_level
 
-    if request.method == 'POST':
+        # Achievements Fetch
+        all_achievements = Achievement.objects.all()
+        user_ach_ids = set(achievements.values_list('achievement_id', flat=True))
+        
+        achievements_with_status = []
+        for ach in all_achievements:
+            achievements_with_status.append({
+                'achievement': ach,
+                'is_earned': ach.id in user_ach_ids
+            })
+
+        # Activity Feed
+        activity_items = []
+        
+        # 1. Logins
+        for login_act in self.request.user.login_history.all()[:5]:
+            activity_items.append({
+                'type': 'login',
+                'title': 'Login',
+                'sub': f'{timezone.localtime(login_act.timestamp).strftime("%b %d, %H:%M")}',
+                'timestamp': login_act.timestamp,
+                'xp': '—'
+            })
+        
+        # 2. Quiz Attempts
+        quiz_attempts = UserQuizAttempt.objects.filter(
+            user=self.request.user, 
+            completed_at__isnull=False
+        ).order_by('-completed_at')[:5]
+        
+        for qa in quiz_attempts:
+            try:
+                dt_str = timezone.localtime(qa.completed_at).strftime("%b %d")
+                activity_items.append({
+                    'type': 'quiz',
+                    'title': f'Completed Quiz — {qa.quiz.title}',
+                    'sub': f'{qa.quiz.subject.name} · {dt_str}',
+                    'timestamp': qa.completed_at,
+                    'xp': f'+{qa.quiz.xp_reward} XP'
+                })
+            except Exception:
+                continue
+        
+        # 3. XP Transactions
+        xp_trans = XPTransaction.objects.filter(user=self.request.user).exclude(reason__icontains="Quiz").order_by('-timestamp')[:5]
+        for xt in xp_trans:
+            activity_items.append({
+                'type': 'achievement',
+                'title': xt.reason,
+                'sub': f'{timezone.localtime(xt.timestamp).strftime("%b %d")}',
+                'timestamp': xt.timestamp,
+                'xp': f'+{xt.amount} XP'
+            })
+        
+        activity_items.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        context.update({
+            'profile': profile,
+            'xp_progress': xp_progress,
+            'xp_needed_to_next': xp_needed_to_next,
+            'next_level': next_level,
+            'badges_with_status': achievements_with_status[:8],
+            'activity_items': activity_items[:8],
+            'completed_quizzes': profile.quizzes_completed,
+            'password_form': PasswordChangeForm(self.request.user)
+        })
+        return context
+
+    def post(self, request, *args, **kwargs):
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
         action = request.POST.get('action')
         
         if action == 'update_profile':
             new_username = request.POST.get('username')
-            new_name = request.POST.get('name', '')
+            new_full_name = request.POST.get('name', '')
             
-            if not new_username:
-                messages.error(request, "Username cannot be empty")
-            else:
-                user = request.user
-                if User.objects.filter(username=new_username).exclude(id=user.id).exists():
+            if new_username:
+                if User.objects.filter(username=new_username).exclude(id=request.user.id).exists():
                     messages.error(request, "This username is already taken.")
                 else:
-                    user.username = new_username
-                    name_parts = new_name.split(' ', 1)
-                    user.first_name = name_parts[0]
-                    user.last_name = name_parts[1] if len(name_parts) > 1 else ''
-                    user.save()
-                    
-                    profile.interests = request.POST.get('interests', '')
-                    profile.skill_level = request.POST.get('skill_level', 'BEGINNER')
-                    if 'profile_picture' in request.FILES:
-                        profile.profile_picture = request.FILES['profile_picture']
-                    profile.save()
-                    messages.success(request, "Profile updated successfully!")
-                
+                    request.user.username = new_username
+            
+            # Update User full name fields (first/last name)
+            if new_full_name:
+                if ' ' in new_full_name:
+                    first, last = new_full_name.split(' ', 1)
+                    request.user.first_name = first
+                    request.user.last_name = last
+                else:
+                    request.user.first_name = new_full_name
+                    request.user.last_name = ''
+            
+            request.user.save()
+            
+            profile.full_name = new_full_name
+            profile.interests = request.POST.get('interests', '')
+            profile.skill_level = request.POST.get('skill_level', 'BEGINNER')
+            if 'profile_picture' in request.FILES:
+                profile.profile_picture = request.FILES['profile_picture']
+            profile.save()
+            messages.success(request, "Profile updated successfully!")
+            
         elif action == 'change_password':
             form = PasswordChangeForm(request.user, request.POST)
             if form.is_valid():
@@ -213,30 +278,19 @@ def account_view(request):
         elif action == 'logout_all':
             sessions = Session.objects.filter(expire_date__gte=timezone.now())
             for session in sessions:
-                # This logic clears all sessions for the current user including the current one
                 if str(request.user.pk) == session.get_decoded().get('_auth_user_id'):
                     session.delete()
             messages.success(request, "You have been logged out from all devices.")
             return redirect('login')
+
+        elif action == 'delete_account':
+            user = request.user
+            logout(request)
+            user.delete()
+            messages.success(request, "Your account has been deleted.")
+            return redirect('landing_page')
             
         return redirect('account')
-        
-    login_history = request.user.login_history.all()[:10]
-    password_form = PasswordChangeForm(request.user)
-    
-    context = {
-        'profile': profile,
-        'badges': badges,
-        'xp_to_next': xp_to_next,
-        'xp_progress': xp_progress,
-        'next_level': next_level,
-        'completed_quizzes': completed_quizzes,
-        'quizzes_remaining': quizzes_remaining,
-        'active_challenges': active_challenges,
-        'login_history': login_history,
-        'password_form': password_form,
-    }
-    return render(request, 'core/account.html', context)
 
 def pricing_view(request):
     """Render the pricing plans page."""
@@ -292,223 +346,119 @@ class AskAIView(APIView):
             # Call FreeFlow LLM API
             client = get_freeflow_client()
             
-            # Generalized Day Tracking
+            # Simplified Day Tracking
             current_day = 1
-            progress = None
             if request.user.is_authenticated:
-                progress, _ = SubjectProgress.objects.get_or_create(user=user, subject=topic)
-                current_day = progress.current_day
+                # We could track subject progress here if needed, 
+                # but for now we follow the simple 100 XP leveling.
+                pass
             
-            # Fetch recent conversation history for memory (last 5 exchanges for CURRENT SUBJECT and DAY)
-            # This prevents cross-subject memory leakage
+            # Fetch recent conversation history for memory
             history_objs = Conversation.objects.filter(
                 user=user, 
-                topic=topic, 
-                day_number=current_day
+                topic=topic
             ).order_by('-created_at')[:5]
 
-            # Define the curriculum or special context based on the topic
-            curriculum_context = f"CURRENT DAY: Day {current_day}\nINSTRUCTIONS:\n1. Focus on the current day's lesson.\n2. After 15 helpful exchanges, or if the student mastered the topic, suggest moving to 'Day {current_day + 1}' and include 'PROGRESS_UPDATE: NEXT_DAY' at the end."
-
-            if "history" in topic.lower():
-                chapters = [
-                    "Origins of Humanity & Early Civilizations", "Ancient Mesopotamia & Egypt",
-                    "Ancient Greece", "Ancient Rome", "The Middle Ages",
-                    "Islamic Golden Age & The Mongols", "The Black Death & Growth of Towns"
-                ]
-                day_name = chapters[current_day - 1] if current_day <= len(chapters) else "Advanced History"
-                curriculum_context += f"\nHISTORY CONTEXT: Focus strictly on {day_name}. DO NOT discuss Astronomy or Science unless asked."
-            elif "astronomy" in topic.lower():
-                chapters = ["Our Solar System", "Burning Stars", "The Milky Way", "Black Holes", "Space Exploration", "The Big Bang", "Galaxies Beyond"]
-                day_name = chapters[current_day - 1] if current_day <= len(chapters) else "Astronomy"
-                curriculum_context += f"\nASTRONOMY CONTEXT: Focus strictly on {day_name}."
-            elif "biology" in topic.lower() or "science" in topic.lower():
-                chapters = ["Building Blocks: Cells", "Plant Life", "Animal Kingdom", "Human Body", "Ecosystems", "Genetics", "Evolution"]
-                day_name = chapters[current_day - 1] if current_day <= len(chapters) else "Science"
-                curriculum_context += f"\nSCIENCE CONTEXT: Focus strictly on {day_name}. DO NOT discuss History or Philosophy."
-            elif "philosophy" in topic.lower():
-                chapters = ["Great Ideas", "Ethics", "Logic", "Ancient Thinkers", "The Nature of Mind", "Justice", "Existentialism"]
-                day_name = chapters[current_day - 1] if current_day <= len(chapters) else "Philosophy"
-                curriculum_context += f"\nPHILOSOPHY CONTEXT: Focus strictly on {day_name}. DO NOT talk about stars, galaxies, or science unless relevant to the philosophical concept."
+            # Simplified curriculum context
+            curriculum_context = f"Topic: {topic}. Target Level: 100 XP milestones."
 
             system_instr = (
-                f"You are Antigravity, a friendly and intelligent {topic} Tutor for children aged 7–14. "
-                "You are a real one-on-one personal tutor speaking through voice. "
-                "IDENTITY & VOICE:\n"
-                "1. Speak in a warm, gentle, friendly, and encouraging tone suitable for children.\n"
-                "2. Use short sentences and natural pauses.\n"
-                "3. Avoid robotic or formal language. Sound like a caring teacher speaking calmly to one child.\n"
-                "4. Keep responses under 100 words unless telling a short story.\n"
-                "5. Use encouraging phrases like 'That's a great question!' or 'You're thinking really well.'\n"
-                "6. ALWAYS end with exactly ONE simple follow-up question.\n"
-                "CONVERSATION BEHAVIOR:\n"
-                "1. If the student pauses, wait patiently (keep responses flowing naturally).\n"
-                "2. If audio is unclear, say: 'I didn’t catch that fully. Can you say it again?'\n"
-                "3. Break complex ideas into small relatable steps.\n"
-                "4. Praise effort, not just correct answers.\n"
-                "SAFETY & REDIRECTION:\n"
-                "1. Never discuss violence, politics, adult topics, or unsafe behavior.\n"
-                "2. If asked something inappropriate, gently redirect: 'That's not something we need to explore right now. Let’s learn something fun instead!'\n"
-                "CURRICULUM CONTEXT:\n"
-                f"{curriculum_context}\n"
-                "FORMATTING:\n"
-                "1. DO NOT use any asterisks (*) or bolding (**). Keep text clean for text-to-speech.\n"
-                "2. Use emojis in the text to keep it fun! 🌈✨"
+                f"You are Antigravity, a friendly AI Tutor for {topic}. "
+                "Sound like a caring teacher. Keep responses concise (under 100 words). "
+                "Use emojis! 🌈✨"
             )
             
             messages = [{"role": "system", "content": system_instr}]
-            
-            # Add history in chronological order
             for chat in reversed(history_objs):
                 messages.append({"role": "user", "content": chat.question})
                 messages.append({"role": "assistant", "content": chat.answer})
-            
-            # Add current question
             messages.append({"role": "user", "content": question})
 
-            # FreeFlow uses a similar structure to OpenAI
-            response = client.chat(
-                messages=messages,
-                timeout=15.0
-            )
+            response = client.chat(messages=messages, timeout=15.0)
             answer = response.content
 
-            # Update subject progress
-            if request.user.is_authenticated:
-                progress.day_question_count += 1
-                
-                # Check for "NEXT_DAY" trigger OR 15 questions limit
-                should_advance = "PROGRESS_UPDATE: NEXT_DAY" in answer or "PROGRESS_UPDATE: NEXT_CHAPTER" in answer or progress.day_question_count >= 15
-                
-                if should_advance:
-                    progress.current_day += 1
-                    progress.day_question_count = 0
-                    answer = answer.replace("PROGRESS_UPDATE: NEXT_DAY", "").replace("PROGRESS_UPDATE: NEXT_CHAPTER", "").strip()
-                
-                progress.save()
-                
-                # Save conversation with day number
-                Conversation.objects.create(
-                    user=user,
-                    topic=topic,
-                    question=question,
-                    answer=answer,
-                    day_number=current_day
-                )
-            else:
-                # Normal topic or guest
-                Conversation.objects.create(
-                    user=user,
-                    topic=topic,
-                    question=question,
-                    answer=answer
-                )
+            # Save conversation
+            Conversation.objects.create(
+                user=user,
+                topic=topic,
+                question=question,
+                answer=answer
+            )
 
             return Response({"answer": answer}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            error_msg = str(e)
-            
-            # Specific handling for FreeFlow when no keys are valid
-            if "All providers exhausted" in error_msg or "No providers configured" in error_msg:
-                mock_answer = f"I'm here! I've switched to my 'Internal Intelligence' (Mock Mode) because your FreeFlow API keys (Groq/Gemini/OpenAI) are either missing or invalid in the .env file. Please check your configuration!"
-                
-                Conversation.objects.create(
-                    user=user,
-                    topic=topic,
-                    question=question,
-                    answer=mock_answer
-                )
-                return Response({"answer": mock_answer, "is_mock": True}, status=status.HTTP_200_OK)
-
-            # Friendly fallback if quota is exceeded or request times out
-            if "insufficient_quota" in error_msg or "timeout" in error_msg.lower():
-                mock_answer = f"I'd love to help you with '{question}', but I'm currently having a little trouble thinking (API Error/Timeout). Let me try again in a moment!"
-                if "insufficient_quota" in error_msg:
-                    mock_answer = f"I'd love to help you with '{question}', but my AI brain needs more energy (Quota Exceeded). Please check your FreeFlow provider keys!"
-                
-                # Still save the conversation for memory testing
-                Conversation.objects.create(
-                    user=user,
-                    topic=topic,
-                    question=question,
-                    answer=mock_answer
-                )
-                return Response({"answer": mock_answer, "is_mock": True}, status=status.HTTP_200_OK)
-                
-            return Response(
-                {"error": error_msg},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class DashboardStatsView(APIView):
     """
     GET: Fetch personalized gamification stats for the student dashboard.
-    Also handles daily streak updates.
+    Also handles daily streak updates and awards daily login XP.
     """
     def get(self, request):
-        profile = request.user.profile
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
         today = timezone.now().date()
         
         # Streak Update Logic
         if profile.last_login_date:
             if profile.last_login_date == today:
-                # Already logged in today
                 pass
             elif profile.last_login_date == today - timedelta(days=1):
-                # Consecutive day login
                 profile.current_streak += 1
                 if profile.current_streak > profile.max_streak:
                     profile.max_streak = profile.current_streak
+                
+                # Bonus XP for 7-day streak
+                if profile.current_streak == 7:
+                    award_xp(request.user, 100, "7-Day Streak Bonus!")
             else:
-                # Streak broken
                 profile.current_streak = 1
         else:
-            # First time tracking streak
             profile.current_streak = 1
             
         profile.last_login_date = today
         profile.save()
         
+        from .serializers import DashboardStatsSerializer
         serializer = DashboardStatsSerializer(profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class CompleteQuizView(APIView):
     """
     POST: Mark a quiz as completed and reward the student with XP.
-    Expects JSON: {"quiz_id": 123, "score": 85}
+    Expects JSON: {"quiz_id": 123, "score": 85, "time_taken": 120}
     """
     def post(self, request):
         quiz_id = request.data.get('quiz_id')
         score = request.data.get('score', 0)
+        time_taken = request.data.get('time_taken', 0)
         
         try:
             quiz = Quiz.objects.get(id=quiz_id)
-            progress, created = UserQuizProgress.objects.get_or_create(
-                user=request.user, 
-                quiz=quiz
+            
+            # Record Attempt
+            attempt = UserQuizAttempt.objects.create(
+                user=request.user,
+                quiz=quiz,
+                score=score,
+                total_questions=quiz.questions.count(),
+                time_taken_seconds=time_taken,
+                completed_at=timezone.now()
             )
             
-            if not progress.completed:
-                progress.completed = True
-                progress.score = score
-                progress.completed_at = timezone.now()
-                progress.save()
-                
-                # Reward XP via transaction (triggers signal for level-up/badges)
-                XPTransaction.objects.create(
-                    user=request.user,
-                    amount=quiz.xp_reward,
-                    reason=f"Completed Quiz: {quiz.title}"
-                )
-                
-                return Response({
-                    "status": "success", 
-                    "xp_earned": quiz.xp_reward,
-                    "message": f"Awesome! You earned {quiz.xp_reward} XP!"
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({"message": "Quiz already completed."}, status=status.HTTP_200_OK)
+            # Update Profile Count
+            profile = request.user.profile
+            profile.quizzes_completed += 1
+            profile.save()
+            
+            # Award XP using service (+50 XP as per requirement)
+            award_xp(request.user, quiz.xp_reward, f"Quiz Completed: {quiz.title}")
+            
+            return Response({
+                "status": "success", 
+                "xp_earned": quiz.xp_reward,
+                "message": f"Fantastic! You earned {quiz.xp_reward} XP!"
+            }, status=status.HTTP_200_OK)
                 
         except Quiz.DoesNotExist:
             return Response({"error": "Quiz not found"}, status=status.HTTP_404_NOT_FOUND)

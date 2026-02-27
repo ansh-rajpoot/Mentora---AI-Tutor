@@ -1923,7 +1923,7 @@
     {% if user.is_authenticated %}
     async function loadDashboardStats() {
       try {
-        const response = await fetch('/api/dashboard/stats/');
+        const response = await fetch('/dashboard/stats/');
         const data = await response.json();
 
         document.getElementById('stat-xp').innerText = data.total_xp.toLocaleString();

@@ -1,72 +1,459 @@
 {% extends 'core/base.html' %}
+{% load static %}
 
-{% block title %}Account - AI Teacher{% endblock %}
+{% block title %}Mentora — Account Settings{% endblock %}
+
+{% block extra_css %}
+<link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+<style>
+    :root {
+        --primary: #6366f1;
+        --primary-glow: rgba(99, 102, 241, 0.15);
+        --accent: #22d3ee;
+        --bg-dark: #0f172a;
+        --card-bg: rgba(30, 41, 59, 0.7);
+        --border: rgba(148, 163, 184, 0.1);
+        --glass: rgba(255, 255, 255, 0.03);
+        --text-primary: #f8fafc;
+        --text-secondary: #94a3b8;
+        --radius: 20px;
+        --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html,
+    body {
+        overflow: auto !important;
+        overflow-y: auto !important;
+        height: auto !important;
+        min-height: 100vh;
+    }
+
+    body {
+        background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+        color: var(--text-primary);
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    .account-container {
+        max-width: 1200px;
+        margin: 40px auto;
+        padding: 0 24px;
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 32px;
+    }
+
+    @media (max-width: 968px) {
+        .account-container {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .glass-card {
+        background: var(--card-bg);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 32px;
+        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .profile-sidebar {
+        position: sticky;
+        top: 40px;
+        height: fit-content;
+        text-align: center;
+    }
+
+    .back-home {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 32px;
+        transition: var(--transition);
+        width: fit-content;
+        padding: 8px 16px;
+        border-radius: 12px;
+        background: var(--glass);
+        border: 1px solid var(--border);
+        text-decoration: none;
+    }
+
+    .back-home:hover {
+        color: #fff;
+        background: var(--primary-glow);
+        transform: translateX(-4px);
+    }
+
+    .avatar-container {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 24px;
+        cursor: pointer;
+    }
+
+    .avatar-container img,
+    .avatar-placeholder {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 4px solid var(--border);
+        transition: var(--transition);
+    }
+
+    .avatar-placeholder {
+        background: linear-gradient(135deg, var(--primary), var(--accent));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: white;
+    }
+
+    .profile-name {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 24px;
+        background: linear-gradient(to right, #fff, #94a3b8);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        word-break: break-word;
+        max-width: 100%;
+        line-height: 1.2;
+    }
+
+    .profile-level {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--primary-glow);
+        color: var(--primary);
+        padding: 6px 16px;
+        border-radius: 100px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        margin-bottom: 24px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-bottom: 32px;
+    }
+
+    @media (max-width: 640px) {
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .stat-card {
+        background: var(--glass);
+        border: 1px solid var(--border);
+        padding: 24px;
+        border-radius: var(--radius);
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #fff;
+    }
+
+    .stat-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-top: 4px;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .section-title::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+        text-align: left;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+    }
+
+    .form-control {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 16px;
+        color: #fff;
+        font-size: 1rem;
+        outline: none;
+        transition: var(--transition);
+    }
+
+    .form-control:focus {
+        border-color: var(--primary);
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    select.form-control option {
+        background-color: #1e293b;
+        color: #fff;
+    }
+
+    .btn {
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        font-size: 0.875rem;
+        transition: var(--transition);
+    }
+
+    .btn-primary {
+        background: var(--primary);
+        color: #fff;
+    }
+
+    .btn-primary:hover {
+        background: #4f46e5;
+        transform: translateY(-2px);
+    }
+
+    .btn-danger {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .activity-item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+        border-radius: 16px;
+        background: var(--glass);
+        border: 1px solid var(--border);
+        margin-bottom: 12px;
+    }
+
+    .activity-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: var(--primary-glow);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .badges-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 16px;
+    }
+
+    .badge-item {
+        background: var(--glass);
+        border-radius: 16px;
+        padding: 12px;
+        text-align: center;
+        border: 1px solid var(--border);
+    }
+
+    .badge-item.locked {
+        opacity: 0.3;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<aside class="sidebar">
-    <button class="new-chat-btn" onclick="location.href='/'">
-        <i data-lucide="arrow-left" style="width: 18px;"></i>
-        <span>Back to Chat</span>
-    </button>
-    <div class="history-label">General</div>
-    <a href="#" class="history-item" style="background: rgba(255,255,255,0.05); font-weight: 600;">
-        <i data-lucide="user" style="width: 16px; margin-right: 8px; vertical-align: middle;"></i>
-        Profile
-    </a>
-    <a href="{% url 'pricing' %}" class="history-item">
-        <i data-lucide="credit-card" style="width: 16px; margin-right: 8px; vertical-align: middle;"></i>
-        Payments
-    </a>
-
-    <div class="sidebar-footer" style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border-color);">
-        <a href="{% url 'logout' %}?next=/" class="sidebar-link" style="color: var(--text-secondary);">
-            <i data-lucide="log-out" style="width: 18px;"></i>
-            <span>Sign out</span>
+<div class="account-container">
+    <aside class="profile-sidebar glass-card">
+        <a href="{% url 'landing_page' %}" class="back-home">
+            <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
+            Back to Home
         </a>
-    </div>
-</aside>
 
-<main class="main-chat">
-    <div class="settings-container">
-        <header class="settings-header">
-            <h1>Settings</h1>
-            <p style="color: var(--text-secondary);">Manage your account and preferences.</p>
-        </header>
-
-        <div class="settings-list">
-            <!-- Profile Section -->
-            <section class="settings-section">
-                <h2>Profile Information</h2>
-
-                <div class="settings-item">
-                    <span class="settings-label">Log-in Email</span>
-                    <div class="settings-content">{{ user.username }}</div>
-                </div>
-
-                <form method="POST">
-                    {% csrf_token %}
-                    <div class="settings-item">
-                        <label class="settings-label" for="interests-textarea">Learning Interests</label>
-                        <textarea id="interests-textarea" name="interests"
-                            style="background: #111; color: white; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-family: inherit; font-size: 0.95rem; resize: vertical; min-height: 120px; outline: none; margin-top: 8px;">{{ profile.interests }}</textarea>
-                    </div>
-                    <button type="submit" class="btn-submit-full"
-                        style="width: auto; padding-left: 24px; padding-right: 24px;">Update Profile</button>
-                </form>
-            </section>
-
-            <!-- Plan Section -->
-            <section class="settings-section"
-                style="display: flex; align-items: center; justify-content: space-between;">
-                <div>
-                    <h2>Subscription Plan</h2>
-                    <div style="color: var(--text-secondary); font-size: 0.95rem;">You are currently using the
-                        <strong>{{ profile.get_plan_display }}</strong> plan.</div>
-                </div>
-                <button class="btn-secondary" onclick="location.href='{% url 'pricing' %}'">Manage subscription</button>
-            </section>
+        <div class="avatar-container" onclick="document.getElementById('profile-pic-input').click()">
+            {% if profile.profile_picture %}
+            <img src="{{ profile.profile_picture.url }}" alt="{{ user.username }}">
+            {% else %}
+            <div class="avatar-placeholder">{{ user.username|slice:":1"|upper }}</div>
+            {% endif %}
         </div>
-    </div>
-</main>
-<script>lucide.createIcons();</script>
+
+        <h1 class="profile-name">{{ profile.full_name|default:user.username }}</h1>
+        <div class="profile-level">Lv. {{ profile.current_level.number|default:1 }} • {{
+            profile.current_level.title|default:"Smart Explorer" }}</div>
+
+        <div style="text-align: left; margin-top: 24px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px;">
+                <span>Progress</span>
+                <span>{{ profile.total_xp }} XP</span>
+            </div>
+            <div style="height: 8px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden;">
+                <div style="height: 100%; background: var(--primary); width: {{ xp_progress }}%;"></div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <section class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-value">{{ completed_quizzes|default:0 }}</span>
+                <span class="stat-label">Quizzes</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">{{ profile.current_streak|default:0 }}</span>
+                <span class="stat-label">Streak</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">{{ profile.total_xp|default:0 }}</span>
+                <span class="stat-label">Total XP</span>
+            </div>
+        </section>
+
+        <section class="glass-card" style="margin-bottom: 32px;">
+            <h2 class="section-title">Profile Settings</h2>
+            {% if messages %}
+            <div style="margin-bottom: 20px;">
+                {% for message in messages %}
+                <div
+                    style="padding: 12px; border-radius: 12px; background: rgba(34, 211, 238, 0.1); color: var(--accent); font-size: 0.875rem; border: 1px solid rgba(34, 211, 238, 0.2);">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_profile">
+                <input type="file" name="profile_picture" id="profile-pic-input" style="display: none;">
+
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" name="username" class="form-control" value="{{ user.username }}">
+                </div>
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" name="name" class="form-control" value="{{ profile.full_name }}">
+                </div>
+                <div class="form-group">
+                    <label>Interests</label>
+                    <textarea name="interests" class="form-control" rows="3">{{ profile.interests }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Stage</label>
+                    <select name="skill_level" class="form-control">
+                        <option value="BEGINNER" {% if profile.skill_level=='BEGINNER' %}selected{% endif %}>Beginner
+                        </option>
+                        <option value="INTERMEDIATE" {% if profile.skill_level=='INTERMEDIATE' %}selected{% endif %}>
+                            Intermediate</option>
+                        <option value="ADVANCED" {% if profile.skill_level=='ADVANCED' %}selected{% endif %}>Advanced
+                        </option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </form>
+        </section>
+
+        <section class="glass-card" style="margin-bottom: 32px;">
+            <h2 class="section-title">Achievements</h2>
+            <div class="badges-grid">
+                {% for item in badges_with_status %}
+                <div class="badge-item {% if not item.is_earned %}locked{% endif %}"
+                    title="{{ item.achievement.description }}">
+                    <div style="font-size: 2rem;">
+                        {% if item.achievement.icon == 'rocket' %}🚀
+                        {% elif item.achievement.icon == 'coins' %}💰
+                        {% elif item.achievement.icon == 'flame' %}🔥
+                        {% elif item.achievement.icon == 'award' %}🏅
+                        {% elif item.achievement.icon == 'brain' %}🧠
+                        {% elif item.achievement.icon == 'trophy' %}🏆
+                        {% else %}⭐{% endif %}
+                    </div>
+                    <div style="font-size: 0.7rem; margin-top: 8px;">{{ item.achievement.name }}</div>
+                </div>
+                {% empty %}
+                <p style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; padding: 20px;">No
+                    achievements found yet. Keep learning! 🌟</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="glass-card">
+            <h2 class="section-title">Activity</h2>
+            {% for item in activity_items %}
+            <div class="activity-item">
+                <div class="activity-icon">
+                    {% if item.type == 'quiz' %}📝
+                    {% elif item.type == 'achievement' %}🏆
+                    {% elif item.type == 'xp' %}✨
+                    {% else %}🔔{% endif %}
+                </div>
+                <div style="flex: 1;">
+                    <div class="activity-title" style="font-weight: 700; font-size: 0.9rem;">{{ item.title }}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">{{ item.sub }}</div>
+                </div>
+                <div style="color: var(--accent); font-weight: 700;">{{ item.xp|default:"" }}</div>
+            </div>
+            {% empty %}
+            <p style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; padding: 20px;">No recent
+                activity yet. Go learn something! 🚀</p>
+            {% endfor %}
+        </section>
+
+        <div style="display: flex; gap: 16px; margin-top: 24px;">
+            <form method="POST" style="flex: 1;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="logout_all">
+                <button class="btn btn-danger" style="width: 100%;">Logout Sessions</button>
+            </form>
+            <form method="POST" style="flex: 1;" onsubmit="return confirm('Delete forever?')">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete_account">
+                <button class="btn btn-danger" style="width: 100%;">Delete Account</button>
+            </form>
+        </div>
+    </main>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    });
+</script>
 {% endblock %}
