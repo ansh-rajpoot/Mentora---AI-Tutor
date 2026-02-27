@@ -48,7 +48,7 @@ def login_view(request):
         user = authenticate(request, username=email, password=password)
         if user is not None:
             login(request, user)
-            return redirect('teacher_interface')
+            return redirect('account')
         else:
             return render(request, 'core/login.html', {'error': 'Invalid credentials'})
     return render(request, 'core/login.html')
@@ -68,7 +68,7 @@ def signup_view(request):
             
         user = User.objects.create_user(username=email, email=email, password=password)
         login(request, user)
-        return redirect('teacher_interface')
+        return redirect('account')
     return render(request, 'core/signup.html')
 
 def logout_view(request):
