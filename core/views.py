@@ -77,21 +77,13 @@ def logout_view(request):
     return redirect('teacher_interface')
 
 def chat_history_view(request):
-    """API endpoint to get chat history. Supports filtering by day for history mode."""
-    day = request.GET.get('day')
+    """API endpoint to get chat history."""
     topic = request.GET.get('topic', 'General Learning')
     
-    if request.user.is_authenticated:
-        history = Conversation.objects.filter(user=request.user, topic=topic)
-        if day:
-            history = history.filter(day_number=day)
-        else:
-             # Default to current day
-             subject, _ = Subject.objects.get_or_create(name=topic)
-             # Current day logic removed or to be implemented later
-             history = history.filter(topic=topic)
-    else:
+    if not request.user.is_authenticated:
         return JsonResponse({"history": []})
+
+    history = Conversation.objects.filter(user=request.user, topic=topic)
         
     data = [
         {
@@ -99,7 +91,7 @@ def chat_history_view(request):
             "question": h.question, 
             "answer": h.answer, 
             "topic": h.topic,
-            "day": h.day_number,
+            "day": None,
             "timestamp": h.created_at.isoformat()
         }
         for h in history
