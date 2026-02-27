@@ -4,3 +4,7 @@ django-cors-headers
 openai
 python-dotenv
 freeflow-llm
+google-generativeai
+gunicorn
+whitenoise
+dj-database-url
