@@ -22,10 +22,7 @@ SECRET_KEY = os.environ.get(
 
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = os.environ.get(
-    'ALLOWED_HOSTS',
-    'localhost,127.0.0.1,testserver'
-).split(',') + ['*.railway.app', '*.up.railway.app', 'mentora-ai-tutor-production.up.railway.app']
+ALLOWED_HOSTS = ['*']
 
 # Allow Railway's internal host header
 CSRF_TRUSTED_ORIGINS = [
