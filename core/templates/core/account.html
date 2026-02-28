@@ -306,6 +306,11 @@
 {% block content %}
 <div class="account-container">
     <aside class="profile-sidebar glass-card">
+        <div style="margin-bottom: 24px; text-align: center;">
+            <img src="{% static 'core/images/logo.png' %}" alt="Mentora"
+                style="width: 60px; height: 60px; border-radius: 12px; object-fit: contain;">
+        </div>
+
         <a href="{% url 'landing_page' %}" class="back-home">
             <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
             Back to Home
@@ -320,7 +325,8 @@
         </div>
 
         <h1 class="profile-name">{{ profile.full_name|default:user.username }}</h1>
-        <div class="profile-level">Lv. {{ profile.current_level.number|default:1 }} - {{ profile.current_level.title|default:"Smart Explorer" }}</div>
+        <div class="profile-level">Lv. {{ profile.current_level.number|default:1 }} - {{
+            profile.current_level.title|default:"Smart Explorer" }}</div>
 
         <div style="text-align: left; margin-top: 24px;">
             <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px;">
@@ -382,11 +388,11 @@
                 <div class="form-group">
                     <label>Stage</label>
                     <select name="skill_level" class="form-control">
-                        <option value="BEGINNER" {% if profile.skill_level == 'BEGINNER' %}selected{% endif %}>Beginner
+                        <option value="BEGINNER" {% if profile.skill_level=='BEGINNER' %}selected{% endif %}>Beginner
                         </option>
-                        <option value="INTERMEDIATE" {% if profile.skill_level == 'INTERMEDIATE' %}selected{% endif %}>
+                        <option value="INTERMEDIATE" {% if profile.skill_level=='INTERMEDIATE' %}selected{% endif %}>
                             Intermediate</option>
-                        <option value="ADVANCED" {% if profile.skill_level == 'ADVANCED' %}selected{% endif %}>Advanced
+                        <option value="ADVANCED" {% if profile.skill_level=='ADVANCED' %}selected{% endif %}>Advanced
                         </option>
                     </select>
                 </div>
@@ -546,4 +552,3 @@
     });
 </script>
 {% endblock %}
-
