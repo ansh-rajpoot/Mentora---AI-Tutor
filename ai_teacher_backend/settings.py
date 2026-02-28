@@ -149,6 +149,11 @@ print("[SETTINGS] DATABASES=", DATABASES, file=sys.stderr)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Ensure core static is explicitly picked up
+STATICFILES_DIRS = [
+    BASE_DIR / 'core' / 'static',
+]
+
 # CORS Settings
 CORS_ALLOW_ALL_ORIGINS = True
 
